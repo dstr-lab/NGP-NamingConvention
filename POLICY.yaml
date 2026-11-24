@@ -1,0 +1,399 @@
+# =============================================================================
+# NGP Pipeline — Institution Policy (configurable pipeline behavior)
+# =============================================================================
+#
+# Settings by which applications or a pipeline process the files named by the convention, with the
+# values chosen by NGP. Another institution may set them differently.
+#
+# Machine export from the internal source, cleaned of internal metadata.
+# Contract version: 1.12.0
+# Source commit: 5ea3c80
+# Export date: 2026-11-24
+# Left out of the export: pipeline_2_1, storage, iiif, package
+# Authors: David Stecker, Jiří Melzmuf, Tereza Kostrounová
+# License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+# =============================================================================
+
+# =============================================================================
+# 1. INTAKE AND RENAMING
+# =============================================================================
+
+intake:
+  overview_table: >
+    Output of the first scan of a batch (Czech: "přehledová tabulka"): what the batch contains,
+    what is missing and what is suspicious ("missing W of the given E index" — Czech: "chybí W
+    daného E indexu" — for type F outside sculpture prefixes when an MST of edition E0 or higher
+    lacks a matching FULL-E{n}W [Ex is not reported]; operator fixes or justifies it; two different F01 for one InvNo; unknown prefix; invalid prefix; retired
+    type; name without "@_"). Named here only; its form and the legacy / designed schema are
+    defined separately. Rules below refer to it.
+
+  convention_anchor: >
+    A file whose name lacks the anchor "@_" (CONVENTION filename.validation_anchor) is not a
+    convention name: the pipeline refuses to process it and lists it in the overview table.
+    Legacy behavior: flagged WARN_NOATMARK when scanned and
+    skipped by renaming, without a database record at scan time.
+
+  unknown_prefix: >
+    An InvNo whose prefix is not in CONVENTION invno.all_prefixes is reported as a warning in
+    the overview table, but the file may pass. The length of
+    the stem number is not checked for an unknown prefix (no max_digits known).
+    Unknown = CONVENTION invno.prefix_validity.unknown; an invalid prefix is NOT unknown.
+
+  invalid_prefix: >
+    An InvNo with an invalid prefix (CONVENTION invno.prefix_validity.invalid: a listed prefix
+    in the wrong letter case such as FON, or the reserved class prefix "Fo" not in the table) —
+    before the anchor or inside Inv{InvNo}@ — makes the name a non-convention name: the
+    pipeline refuses to process the file and lists it in the overview table. It is never
+    corrected automatically (FON may be a typo of FoN or of FO).
+
+  retired_type: >
+    A name using a retired type code (CONVENTION type.retired: S, Sken) is not a convention name:
+    the pipeline refuses to process it and lists it in the overview table. Such a file is
+    accepted only under a new name built by MIGRATION.yaml edge_cases.retired_type_S, assigned
+    either manually or automatically. The state in which such a
+    file waits is defined by the target state machine.
+
+  multiple_invno: >
+    A file naming several InvNo (CONVENTION invno.multiple_invno; the first one is primary) is
+    stored with the primary InvNo: its data belong to the primary object. Every other InvNo in
+    the name receives a reference to the file in the database (precondition: a working database).
+
+  part_keyword:
+    sources: "Filename segments and embedded/XMP keywords (Keywords, Subject)."
+    letter_case: "Non-canonical spellings (Part001, PART001) are rewritten to the canonical part001."
+    malformed: "Part-like keywords that are not canonical (part1, part0001, dil1, cast2) -> skipped for manual review."
+
+  ingest_forms:
+    description: >
+      Pipeline behavior for renaming photographer input files. The single source of the grammar
+      (primary form, fallback form, RAW input forms, camera counter, and keyword tokens) is
+      CONVENTION.yaml ingest_filename.
+    forms:
+      primary: "InvNo@_{CameraCounter}.{ext} — shot type and photographer taken from embedded keywords / EXIF."
+      fallback: "InvNo@_{CameraCounter}_{Fotograf}_{F01/I01/I02}_{WEB}.{ext} — segments in the filename used when keywords are absent."
+      raw: "Renamed to CONVENTION raw_files.standard_form / multi_part_form; part### is placed in the description field according to the keyword order rule."
+    web_detection: >
+      An input file is recognized as a delivered presentational crop when the token WEB
+      (case-insensitive word boundary (?i)\bweb\b) is
+      present either in the filename segments after {CameraCounter} or in embedded keywords
+      (Keywords, Subject, or the leaf of HierarchicalSubject). If the file has WEB but no explicit
+      shot type, it inherits the shot type of a
+      sibling with the same InvNo and CameraCounter, or defaults to F01.
+      For types I and N, the WEB flag is suppressed with a warning.
+    renaming_result: >
+      A delivered presentational crop is renamed to an output filename with size FULL and the
+      presentational flag W in the edition field: FULL-E{n}W (never WEB in description).
+    edition_derivation: >
+      Derived as follows: E{n} (case-insensitive
+      (?i)^E\d+$) from filename segments or keywords, or Ex from (?i)^Ex$; defaults to E0 when
+      not specified.
+
+  convention_version: >
+    For every file, the pipeline records the convention version of its output filename
+    (e.g. "2.0" or "1.x" for legacy names interpreted via MIGRATION.yaml) together with the
+    original input filename (original_filename). Both are stored in the database and in the
+    structured metadata file next to the data on disk. The
+    exact schema of the structured file next to the data is defined separately.
+
+  photographer: >
+    The photographer field is the surname registered in the photographers table (seed data).
+    The photographers' names stay in the repository, including the seed data and the legacy
+    scripts. If not found, the surname segment of the original
+    filename is used.
+
+  date: "Taken from EXIF DateTimeOriginal (fallback CreateDate, ModifyDate) of the primary file."
+
+  source_shot:
+    rule: >
+      A file whose input name carries the segment _Z and whose extension is in CONVENTION
+      raw_files.source_tif.extensions is a source shot and is processed as a RAW: renamed to
+      raw_files.pattern (type Z), kept untouched, paired with its master like a RAW,
+      recorded with its hash. Shots of type F, I and N from the scanner are accepted like any other
+      input.
+
+  ingest_segments:
+    rule: >
+      Segments of an input name are told apart by the lists of CONVENTION ingest_filename.segments; the
+      photographer registry (photographer_registry) is the list of photographers. A name whose segment
+      cannot be put into one class (two lights, two or no candidates for the camera counter) is
+      reported in the overview and not processed; the operator decides and renames the file.
+
+  source_shot_keywords:
+    rule: >
+      The convention requires the shot type (in the name or in keywords) and, for DT Versa, the keyword
+      ppi of a source shot (CONVENTION raw_files.keywords). Pipeline 2.1 does not verify their presence:
+      a source shot without them is paired as before by the RAW pairing of pipeline 2.1 (same shot, type,
+      single type of the InvNo, orphans), without a new report.
+    conflicting_types: >
+      A source shot with two different shot types (in its name and keywords together) is not paired by
+      a guess: it is reported in the overview and not processed.
+
+  ppi:
+    rule: >
+      A keyword {n}ppi (CONVENTION ingest_filename.keyword_tokens.ppi) of an input is recorded as a number
+      in its metadata file (METADATA.schema.json input.ppi). It is never written into an output file
+      name and IPTC enrichment does not write it (IPTC_WRITE.yaml takes keywords only from LIDO).
+
+  checks:
+    source_tif_processed:
+      rule: >
+        A source TIF (source_shot) that does not have bit_depth 16 or whose ICC profile description
+        contains one of looks_processed_profiles (case-insensitive) is reported in the overview as a
+        source that looks processed. The file is processed normally; the operator decides nothing.
+      bit_depth: 16
+      looks_processed_profiles: ["eciRGB", "sRGB"]
+    delivered_jpeg_quality:
+      rule: >
+        A delivered JPG (a presentational crop FULL-E{n}W or an I/N master) whose quality estimated from
+        its quantization tables differs from derivatives.jpeg_quality.value by more than tolerance is
+        reported in the overview with the estimate. The file is processed normally. An estimate that
+        cannot be made (tables of another encoder) is not reported.
+      estimator: "ExifTool Composite:JPEGQualityEstimate (IJG scale 0-100; ExifTool is already a dependency)"
+      # The estimate is approximate and an encoder rounds its own scale, so a smaller deviation is not
+      # a finding.
+      tolerance: 5
+
+
+# =============================================================================
+# 2. METADATA
+# =============================================================================
+
+metadata:
+  part_keyword_iptc: "part### is an internal designation — never written to embedded IPTC/XMP."
+  museion_piece_count: "The number of parts is not checked against the Museion field 'number of pieces'."
+
+
+# =============================================================================
+# 3. DERIVATIVES
+# =============================================================================
+
+derivatives:
+  parameters:
+    # Encoding parameters per size code (the meaning of the codes is in CONVENTION size.types).
+    # Every JPEG the pipeline writes uses quality 90 (see jpeg_quality); A3 is a TIF with LZW compression.
+    # A master written by the pipeline (a conversion of its profile or bit depth) has LZW like a delivered
+    # master (CONVENTION size.types.MST.delivered_format).
+    MST:    { compression: "lzw" }
+    MST-HR: { compression: "none" }
+    # tile_jpeg_quality of PMD: jpeg_quality.applies_to does not cover PMD tiles.
+    # The resolution of every derivative is the single rule derivatives.dpi.
+    A3:     { compression: "lzw", megapixels: 24, threshold: "generated only if source >= 24 megapixels" }
+    FULL:   { quality: 90 }
+    PRW:    { quality: 90, long_edge_px: 3000, bit_depth: 8 }
+    PMD:    { compression: "jpeg", tiled: true, tile_size: 256, tile_jpeg_quality: 80 }
+
+  dpi:
+    # MST and MST-HR keep the resolution of their source.
+    # FULL is included as a derivative ([Inference] of "all other derivatives").
+    # Only the resolution metadata is written (XResolution = YResolution = 300, ResolutionUnit = inches);
+    # the image data do not change.
+    value: 300
+    applies_to: ["A3", "FULL", "PMD", "PRW"]
+    keeps_source: ["MST", "MST-HR"]
+
+  color:
+    # Target profile of every conversion to sRGB (PMD, FULL, I/N master, transient sRGB copy).
+    # The conversion embeds the profile from an ICC file whose description is
+    # target_icc_description. The path to the file is pipeline configuration, not policy (ngp21
+    # defaults.yaml icc.target_profile_path); the file is not stored in the repository. The pipeline
+    # checks the description of the file before the first step of a run.
+    target_icc_description: "sRGB IEC61966-2.1"
+    # Rendering intent of every colour conversion (to sRGB and to eciRGB v2); "relative" (relative
+    # colorimetric) was chosen for pipeline 2.1.
+    rendering_intent: "relative"
+    # Bit depth after the conversion.
+    bit_depth: 8
+    # Target of the conversion of a master with a profile outside the recognized list
+    # (master_conversion). The path to the ICC file is pipeline configuration (ngp21 defaults.yaml
+    # icc.eci_v2_path).
+    # The description must be one of CONVENTION size.types.MST.recognized_profile_descriptions.
+    master_target_icc_description: "eciRGB v2 ICCv4"
+
+  master_conversion:
+    applies_to: "TIF masters of type F (the source of A3, a3.source)"
+    recognized: "CONVENTION size.types.MST.recognized_profile_descriptions: the master is copied unchanged; A3 carries the same profile"
+    other_profile: >
+      The work copy of the master is converted to the profile color.master_target_icc_description with
+      color.rendering_intent, keeping its bit depth and dimensions; A3 is made from the converted
+      master. The event records the original profile with its exact wording; the overview warns.
+    without_profile: "No conversion (the source profile is unknown); the overview warns, the master is kept unchanged."
+    other_types: >
+      A master of another type with a profile outside the list is not converted, only reported.
+    acceptance: "A master outside the recognized profiles is still accepted."
+    grayscale:
+      rule: >
+        A greyscale F master with a profile outside the recognized list (e.g. "Gray Gamma 2.2") is not
+        converted to eciRGB v2. It is copied unchanged (since 1.11.0-draft except its bit depth:
+        master_bit_depth converts a 16-bit master to 8 bit, still greyscale with its profile) and A3 is made
+        from it without a colour conversion. The overview reports it with the exact profile description. The sRGB derivatives
+        (FULL, PMD, PRW) are made as from any other master.
+      detected_by:
+        # A master is greyscale when either value matches (case-insensitive), read from the file, not from its name.
+        icc_color_space: ["GRAY"]                                    # colour space in the ICC profile header
+        photometric_interpretation: ["BlackIsZero", "WhiteIsZero"]   # TIFF tag; also covers a file without a profile
+
+  master_bit_depth:
+    rule: >
+      A delivered master TIF (CONVENTION size.types.MST.delivered_format) of any type, X included, with
+      more than 8 bits per sample is converted to 8 bit on the work copy (step convert_8bit of the hash
+      transition map), after a conversion of its profile (master_conversion) when there is one. The
+      result has LZW (parameters.MST); the overview reports the conversion.
+
+  jpeg_quality:
+    value: 90
+    photoshop_scale: 11
+    # [Unverified] The Photoshop scale 0-12 does not map exactly onto the IJG quality 0-100 used by libvips;
+    # 90 % = Photoshop 11 is the owner's equivalence, not a formula.
+    applies_to:
+      - "FULL (parameters.FULL)"
+      - "PRW (parameters.PRW)"
+      - "conversion of a delivered I master from TIF to the JPG master (i_n_master_format)"
+      - "re-encoding of an I/N JPG master during ICC conversion to sRGB"
+      - "delivered JPG: the presentational crop FULL-E{n}W and the I and N masters (since 1.11.0-draft; checked by intake.checks.delivered_jpeg_quality)"
+    note: "Single value for all JPEG outputs. Legacy used 75 and 85."
+
+  human_work: >
+    Human work of the presentational crop (cropping out the
+    color scale, background retouch) is preserved ONLY in FULL-E{n}W.jpg. PMD-E{n}W.tif and
+    PRW-E{n}W.jpg are computed derivatives. The photographer's delivered TIF of the crop goes
+    to to_delete after FULL-E{n}W.jpg and PMD-E{n}W.tif are generated and verified (disposal.to_delete).
+
+  presentational:
+    description: >
+      Three cases governing how presentational derivatives (with W in the edition field,
+      CONVENTION size.edition_levels.presentational_flag) are produced for type F shots.
+    sculpture_prefixes: ["P", "Vp", "VP", "VVp", "DP", "FP"]
+    cases:
+      a_input_has_web: >
+        (a) The input contains WEB: processed as a delivered presentational crop like any other
+        work (producing FULL-E{n}W.jpg, PMD-E{n}W.tif, and PRW-E{n}W.jpg), even when the InvNo
+        has a sculpture prefix (e.g. a relief photographed with a color scale).
+      b_sculpture_without_web: >
+        (b) The input does not contain WEB and the InvNo prefix is in sculpture_prefixes
+        (P, Vp, VP, VVp, DP, FP): PMD and PRW are generated directly from the type F master
+        MST of edition E0 or higher with W in their edition (PMD-E{n}W.tif, PRW-E{n}W.jpg),
+        without creating FULL-E{n}W.jpg. For Ex (MST-Ex), derivatives are generated without W
+        (FULL-Ex, PMD-Ex, PRW-Ex). Nothing is reported in the overview table.
+      c_non_sculpture_without_web: >
+        (c) The input does not contain WEB and the InvNo prefix is not in sculpture_prefixes:
+        reported in the initial overview table (intake.overview_table, "missing W of the given
+        E index") so the operator decides whether the absence is intentional or an error.
+        Fallback: PMD-E{n} and PRW-E{n} are generated from the master MST (converted to sRGB)
+        WITHOUT W; public use of such derivatives is a manual decision.
+
+  source_selection:
+    # Single unified rule for choosing the source of presentational derivatives (PMD, PRW),
+    # replacing earlier conflicting rules in pmd.per_shot / pmd.principle / prw.source.
+    rule: >
+      One PMD and one PRW per shot (InvNo + type{nn}-{suffix}). For presentational outputs
+      (type F), a source with W in its edition has precedence over any source without W;
+      among candidates with W (or among candidates without W when no W exists), the highest
+      edition in CONVENTION size.edition_levels.order (Ex < E0 < Er < E1 < E2) wins.
+      All other shot types (I, N, R, U, X) never have W and use the highest-edition MST.
+    example: >
+      If a shot has FULL-E0W (presentational crop) and MST-Er (retouched master without a new
+      crop), the source for PMD and PRW is FULL-E0W (producing PMD-E0W and PRW-E0W), because
+      W has precedence over non-W.
+    initial_vs_regeneration: >
+      During initial batch processing, PMD-E{n}W.tif and FULL-E{n}W.jpg may both be generated
+      from the photographer's delivered TIF of the crop before that TIF moves to to_delete.
+      During later regeneration (after the delivered TIF has been deleted), PMD-E{n}W.tif and
+      PRW-E{n}W.jpg are generated from FULL-E{n}W.jpg (the permanent carrier of the human crop)
+      or from a newly delivered crop created by a photographer from MST.
+
+  a3:
+    source: "F master MST only. No A3 for any other type."
+    threshold: "parameters.A3.threshold"
+
+  prw:
+    goal: >
+      Every shot except RAW gets a PRW, except the shot types for which
+      CONVENTION type.codes.{type}.derivatives is "none" (type X).
+    source: >
+      Follows derivatives.source_selection and derivatives.presentational: for type F, the
+      winning W source (FULL-E{n}W, or MST-E{n} directly as PRW-E{n}W for sculpture_prefixes
+      under case (b)), falling back to MST-E{n} (producing PRW-E{n} without W) under case (c).
+      All other types (I, N, R, U, X): the master MST.
+
+  web:
+    delivery: >
+      The presentational crop (input token WEB, output edition E{n}W) is delivered by the
+      photographer; the pipeline never crops an image itself. Directories to-web/ and
+      to-web-done/ with a manual operator step were for consolidation only. Not every F shot
+      has a delivered crop: sculptures without a color scale follow presentational.cases.b_sculpture_without_web
+      (prefixes in presentational.sculpture_prefixes get PMD-E{n}W and PRW-E{n}W directly from
+      MST); other objects without a delivered crop follow presentational.cases.c_non_sculpture_without_web.
+
+  pmd:
+    goal: >
+      Every digitized image (every shot except RAW) gets a PMD and thus a IIIF canvas, except the shot
+      types for which CONVENTION type.codes.{type}.derivatives is "none" (type X).
+    per_shot: >
+      One PMD per shot, selected by derivatives.source_selection. A shot is InvNo +
+      type{nn}-{suffix}; in pipeline 2.1 also + capture date, so the same object photographed again
+      on another day with the same camera counter is a new shot with its own PMD (the rule for
+      pipeline v3 is not decided). Selection:
+      for type F, W has precedence over non-W and within the same W status the highest edition
+      in CONVENTION size.edition_levels.order (Ex < E0 < Er < E1 < E2) wins.
+    principle: >
+      Exactly one admissible source per shot according to derivatives.source_selection and
+      derivatives.presentational. Type F: the presentational crop FULL-E{n}W (or the delivered
+      TIF of the crop on initial run); for sculpture_prefixes without a delivered crop (case b),
+      MST-E{n} produces PMD-E{n}W directly; only when no crop exists on a non-sculpture (case c),
+      MST-E{n} produces PMD-E{n} without W. All other types: the master MST, never a derivative.
+    type_F: >
+      Source selected by derivatives.source_selection and derivatives.presentational — never
+      A3, PRW or another derivative. Under case (c) (non-sculpture F shot without a delivered
+      crop), fallback generates PMD-E{n} + PRW-E{n} without W from the master MST (converted
+      to sRGB), the overview table reports "missing W of the given E index", and public use of
+      such a PMD is decided manually.
+    other_types: >
+      Source = master MST ONLY — never a derivative (A3, FULL, PRW, PMD).
+      Applies to types I, N, R, U, X (all codes except F and Z; type S retired in CONVENTION 2.0.0).
+    edition_Er: "Er is an edition level in size.edition_levels.order; for type F, FULL-ErW beats FULL-E0W, while FULL-E0W beats MST-Er (source_selection)."
+    edition_Ex: "Same per-type rule without W (F: FULL-Ex generated from MST-Ex, others: MST-Ex); Ex never carries W (see ex_processing)."
+    never_source: ["Z (RAW)", "A3", "PRW (incl. historical PRW-Ex)", "PMD", "MST for type F when a W source exists", "FULL for types other than F"]
+    icc: >
+      PMD keeps the embedded sRGB ICC profile; metadata stripping that removes the profile
+      (vips --strip) is not used.
+
+  ex_processing: >
+    The photographer delivers every Ex shot as MST-Ex. The pipeline
+    generates FULL-Ex, PMD-Ex and PRW-Ex from it. If a RAW source file (Z) exists, MST-Ex is only a
+    TEMPORARY file: after the derivatives are generated and verified it goes to to_delete, so that
+    the CONVENTION constraint "no MST-Ex when RAW exists" holds (provenance event recorded).
+    If no RAW exists, MST-Ex is kept as the master.
+
+  i_n_master_format: >
+    CONVENTION size.types.MST.per_type: an I master delivered as TIF is
+    converted to the expected sRGB JPG (quality jpeg_quality.value) and the original goes to
+    to_delete. An N master is accepted as TIF or JPG and is not converted; its PMD is converted
+    to sRGB.
+
+
+# =============================================================================
+# 6. DISPOSAL (to_delete vs. quarantine)
+# =============================================================================
+
+disposal:
+  to_delete:
+    meaning: >
+      Files that do not match the expected outputs. The operator does not have to judge them
+      individually. The list of contents below applies to pipeline 2.1 and pipeline v3; WHEN
+      the contents may be deleted differs between them (deletion is the rule of pipeline v3,
+      pipeline 2.1 has its own rule).
+    deletion: >
+      Rule for pipeline v3 (the supplier pipeline; rules of 2.1 and v3 are kept apart).
+      No automatic deletion during a run.
+      The contents of to_delete may be deleted only after the
+      operator approves it, and the operator approves only after the AIP has been created and
+      verified. AIP verification is a requirement on the designed version (contract of the
+      package and AIP); until that verification exists, nothing in to_delete is
+      deleted. Deletion is approved by a human and executed by a tool (through ngp_core.fsops,
+      with a provenance event).
+    contents:
+      - "Original I master TIF after conversion to the expected JPG master (N masters are not converted)."
+      - "Delivered TIF of the presentational crop after FULL-E{n}W.jpg and PMD-E{n}W.tif were generated from it (only when both exist)."
+      - "MST-Ex after FULL/PMD/PRW were generated, when a RAW exists (derivatives.ex_processing)."
+  quarantine:
+    meaning: "Only files that need a human decision (failed validation, unknown state)."

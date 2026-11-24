@@ -1,0 +1,1194 @@
+# =============================================================================
+# NGP Photographic Documentation — Naming Convention
+# =============================================================================
+#
+# Canonical machine-readable definition of the file naming convention used at the National Gallery
+# Prague (NGP) for photographic documentation of collection objects. It describes file naming only
+# and works without any pipeline.
+#
+# Machine export from the internal source, cleaned of internal metadata.
+# Contract version: 2.3.1
+# Source commit: 5ea3c80
+# Export date: 2026-11-24
+# Left out of the export: structural_files.input_level, collections
+# Authors: David Stecker, Jiří Melzmuf, Tereza Kostrounová
+# License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+# =============================================================================
+
+# =============================================================================
+# 1. FILENAME FORMAT — 5 POSITIONAL FIELDS
+# =============================================================================
+#
+# {invno}@_{type}-{suffix}_{description}_{size}-E{n}_{date}_{photographer}.ext
+#
+# Rules:
+#   - Exactly 5 positional fields separated by _
+#   - Empty field = "-" placeholder (underscore is NEVER omitted)
+#   - Inventory number always ends with @ before the first _
+#   - Multiple inventory numbers: K123@K1242@_...
+#   - The FIRST occurrence of @_ is the anchor (the description may contain Inv{InvNo}@)
+#   - Input (ingest) filenames from photographers use a different grammar and are NOT
+#     convention names until renamed (see section ingest_filename)
+
+filename:
+  pattern: "{invno}@_{type}-{suffix}_{description}_{size}-E{n}_{date}_{photographer}.{ext}"
+  field_count: 5
+  separator: "_"
+  empty_field: "-"
+  invno_delimiter: "@"
+  validation_anchor: "@_"
+  validation_note: >
+    The sequence @_ marks a name built according to this convention; a name without @_
+    is not a convention name. The anchor is the FIRST occurrence of @_: everything before it
+    is the InvNo part (one or more InvNo, each terminated by @), everything after it are the
+    five fields. A later @_ can occur when the description ends with Inv{InvNo}@
+    (description.reserved_words.Inv); it is part of the description.
+  matches:
+    - "FoN1255-001@_N01-GFC2550_InvO1552@_MST-E0_20261105_Stecker.tif"
+    - "FoN1258@_F01-GFA3584_InvO1552@InvO1553@_FULL-E0_20240115_Smith.jpg"
+    - "FoN1258@_F01-GFA3584_InvO1552@_FULL-E0W_20240115_Smith.jpg"
+    - "O1552@O1553@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+
+# =============================================================================
+# 2. INVENTORY NUMBER (InvNo)
+# =============================================================================
+
+invno:
+  description: "Object inventory number terminated by @"
+
+  normalization:
+    - "Remove ALL spaces (not collapse — remove entirely)"
+    - "Remove leading zeros"
+    - "Compatible with LIDO canonical identifier format (Q11722846)"
+
+  # Prefix letters are case-sensitive (Vm, Nm, FoN); 2.0.0 aligned this pattern with
+  # classifier_pattern (1.x used [A-Z]{1,3} and contradicted its own example Vm6926@).
+  pattern_in_filename: "(?:[A-Z]{3}~)?[A-Za-z]{1,3}\\d{1,6}(?:-(?!000)\\d{3})?@"
+  examples: ["R156984@", "K58112@", "O123@", "P45@", "DR1327@", "Vm6926@", "NGA~K12345@",
+             "O12345-001@", "Nm35-002@", "AP5478-021@", "FoN1254-002@", "FoP412@"]
+
+  # ---------------------------------------------------------------------------
+  # SUBNUMBER -### (part of the object with its own registry entry)
+  # ---------------------------------------------------------------------------
+  subnumber:
+    description: >
+      Optional 3-digit subnumber appended to the stem number with "-". Follows the
+      notation of CES (Central Evidence of Collections, Ministry of Culture). The
+      authoritative form of each InvNo is the one recorded in Museion.
+    pattern: "{prefix}{stem}-{nnn}"
+    regex: "-(?!000)\\d{3}"
+    rules:
+      - "Exactly 3 digits, range 001-999; -000 is invalid."
+      - "Allowed for every prefix, including the CES institutional prefix (NGA~O12345-001@)."
+      - "Leading zeros are removed ONLY from the stem number; the subnumber is never changed (O012345-001 -> O12345-001)."
+      - "max_digits of the prefix table applies to the stem number only (after leading-zero removal); exceeding it = invalid."
+      - "Multiple InvNo with subnumbers are allowed (O12345-001@O12345-002@_...)."
+      - "Any other subnumber notation (O12345/1, O12345-1, O 12345 - 001, ...) is NOT canonical (legacy notations: MIGRATION.yaml edge_cases.invno_subnumber_variants)."
+    identity:
+      rule: >
+        An object is identified EITHER as O12345 OR as O12345-001..-nnn, never both.
+        The current authoritative form (Museion) is binding for new files.
+      historical_data: >
+        InvNo are sometimes split into subnumbers after the fact, so historical files may
+        exist under both O12345 and O12345-001. The two forms are distinct identifiers and
+        are not converted into each other (MIGRATION.yaml edge_cases.split_invno).
+    matches:
+      - "O12345-001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+      - "Nm35-002@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+      - "AP5478-021@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+      - "R156984-999@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+      - "NGA~O12345-001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+      - "O12345-001@O12345-002@_I02-E4A0020_Matt_MST-E0_20240115_Smith.tif"
+    rejects:
+      - "O12345-000@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"    # -000 invalid
+      - "O12345-1@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"      # not 3 digits
+      - "O12345-0001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"   # not 3 digits
+      - "O12345/001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"    # wrong separator
+      - "O123456-001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"   # stem exceeds max_digits (O: 5)
+    canonicalization:
+      - { input: "O012345-001", result: "O12345-001" }
+      - { input: "O 12345-001", result: "O12345-001" }
+      - { input: "Vm06926-010", result: "Vm6926-010" }
+
+  multiple_invno:
+    description: "Multiple objects in one capture — concatenate with @"
+    pattern: "{invno1}@{invno2}@_{fields}"
+    example: "K12345@K12346@_I02-E4A0020_Matt_MST-E0_20240115_Smith.tif"
+    primary: >
+      The first InvNo in the name is the primary one; every following InvNo is secondary.
+      Naming only: where the file and its data are stored
+      and how the secondary objects refer to it is pipeline behavior — POLICY.yaml
+      intake.multiple_invno.
+
+  institutional_attribution:
+    description: >
+      Optional institutional prefix before the inventory number, based on the CES
+      (Central Evidence of Collections) code.
+    ces_code_length: 3
+    ngp_ces_code: "NGA"
+    separator: "~"
+    pattern: "{ces_code}~{invno}@"
+    example: "NGA~K12345@"
+
+  # ---------------------------------------------------------------------------
+  # PREFIX SYSTEM
+  # ---------------------------------------------------------------------------
+  # Prefix structure encodes collection + acquisition status.
+  # Base prefix (1 letter) = collection. Modifiers (D/V/F) = status.
+  # Since 2.0.0 also a class of auxiliary records that are not collections: class prefix
+  # "Fo" + medium (auxiliary_photo_records).
+  #
+  # For adoption by other institutions: the PREFIX is the institution-specific
+  # part. Replace this section with your own prefix table.
+  # (Adaptation guide: planned.)
+
+  prefix_logic:
+    base_collections:
+      O: { max_digits: 5, en: "Paintings",  aat: "http://vocab.getty.edu/aat/300033618" }
+      K: { max_digits: 5, en: "Drawings",   aat: "http://vocab.getty.edu/aat/300033973" }
+      R: { max_digits: 6, en: "Prints",     aat: "http://vocab.getty.edu/aat/300041273" }
+      P: { max_digits: 5, en: "Sculpture",  aat: "http://vocab.getty.edu/aat/300047090" }
+
+    status_modifiers:
+      D:
+        en: "Deposited — permanently placed from another collection"
+        applies_to: [O, K, R, P]
+        result_prefixes: [DO, DK, DR, DP]
+      V:
+        en: "On loan — temporarily loaned to the institution"
+        applies_to: [O, K, R, P]
+        result_prefixes: [VO, VK, VR, VP]
+      F:
+        en: "Facsimile — intentional copies, casts, rescue casts"
+        applies_to: [K, O, P, R]
+        result_prefixes: [FK, FO, FP, FR]
+
+    architecture_collection:
+      description: "Architecture collection — subdivided by media type"
+      prefixes:
+        AF: "Architecture - photographs"
+        AK: "Architecture - drawings"
+        AM: "Architecture - models"
+        AN: "Architecture - negatives"
+        AP: "Architecture - plans"
+
+    asian_art_collection:
+      description: "Asian art collection — prefix V, subdivided by type"
+      prefixes:
+        Vm: { en: "Asian art - paintings",      aat: "http://vocab.getty.edu/aat/300033618" }
+        Vp: { en: "Asian art - sculpture",       aat: "http://vocab.getty.edu/aat/300047090" }
+        Vu: { en: "Asian art - applied arts",    aat: "http://vocab.getty.edu/aat/300054168" }
+        Vx: "Asian art - study material"
+      loan_variants:
+        description: "Loaned Asian art — prefix VV"
+        prefixes:
+          VVm: "Loaned Asian painting"
+          VVp: "Loaned Asian sculpture"
+          VVu: "Loaned Asian applied arts"
+          VVx: "Loaned Asian study material"
+
+    new_media:
+      Nm: "New media"
+
+    auxiliary_photo_records:
+      description: >
+        Auxiliary photo records (Czech: "pomocná evidence fotografií", fond Fototéka in Museion):
+        negatives, slides and photographic prints that are NOT collection objects but document
+        works of art. A digitized carrier is named by the InvNo of the CARRIER, not of the
+        depicted work; the depicted work and the year of origin of the carrier are written in
+        the description (description.reserved_words.Inv, description.reserved_words.y).
+        The prefix is the class prefix "Fo" + one letter of the MEDIUM. It carries neither the
+        category (collection object / reproduction / other), nor the material (glass, film,
+        paper), nor the group of the fond (e.g. Kuklík): those are kept in Museion.
+        Each carrier in an envelope has its own subnumber -### (FoN1254-002); part### is never
+        used for the carrier itself. The type of the shot is chosen by its purpose (F, I, N, R,
+        U, X, Z); F means the image meets the visual and aesthetic requirements for presenting
+        the depicted object, not that it passed a technical QC. The master of a
+        negative is inverted to a positive; the negative form is kept by the RAW (Z).
+      class_prefix: "Fo"
+      class_prefix_note: >
+        Reserved: an InvNo prefix that starts with "Fo" and is not listed below is invalid
+        (invno.prefix_validity). "Ph" was considered and rejected.
+      prefixes:
+        FoN: { en: "Negatives",                 aat: "http://vocab.getty.edu/aat/300127173" }
+        FoD: { en: "Slides (photography)",      aat: "http://vocab.getty.edu/aat/300244116" }
+        FoP: { en: "Photographic prints",       aat: "http://vocab.getty.edu/aat/300127104" }
+      examples:
+        - { filename: "FoN1254-002@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif", meaning: "Negative (2nd in the envelope) fit for presentation; year known; master inverted to positive" }
+        - { filename: "FoD3021-001@_N01-GFC2560_InvP2457@-y1962_MST-E0_20261105_Stecker.tif", meaning: "Slide — already positive, master not inverted" }
+        - { filename: "FoP412@_F01-GFC2570_InvO1552@-y1954_MST-E0_20261105_Stecker.tif", meaning: "Print with its own InvNo; y = year of the negative, not of the print" }
+        - { filename: "FoN2104-001@_N01-GFC2590_InvO1552@-y1938_MST-E0_20261105_Stecker.tif", meaning: "Negative of the Kuklík group — same prefix FoN; the group is kept in Museion" }
+      matches:
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"
+        - "FoD3021-001@_N01-GFC2560_InvP2457@-y1962_MST-E0_20261105_Stecker.tif"
+        - "FoP412@_F01-GFC2570_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"
+        - "FoN1256-001@_N01-GFC2551_y1958_MST-E0_20261105_Stecker.tif"
+        - "FoN1254-002@_N01-GFC2547_-_MST-E0_20261105_Stecker.tif"
+      rejects:
+        - "FoNS1254-002@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"   # category S in the prefix
+        - "FON1254-002@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"    # capital O: invalid prefix
+        - "FoN123456@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"      # stem exceeds max_digits (5)
+        - "FoN1254-002-z1@_F01-GFC2547_InvO1552@_MST-E0_20261105_Stecker.tif"       # print as a derived number of the negative
+
+  prefix_validity:
+    # Distinguish an unknown and an invalid prefix. Naming only; what the pipeline does with
+    # each is POLICY.yaml intake.unknown_prefix / intake.invalid_prefix.
+    known: "The prefix is listed in all_prefixes (exact letter case)."
+    invalid: >
+      The prefix (a) equals a listed prefix except for letter case (FON for FoN, vm for Vm), or
+      (b) starts with the reserved class prefix of auxiliary_photo_records ("Fo") and is not
+      listed (FoNS, FoX). A name with an invalid prefix — before the anchor or inside
+      Inv{InvNo}@ — is not a convention name.
+    unknown: >
+      Any other prefix of the general form [A-Za-z]{1,3} that is not listed. The name is a
+      convention name, but the prefix is not guaranteed (no max_digits known).
+    matches:
+      - "XY123@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"     # unknown prefix
+      - "VP123@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"     # VP and Vp are both listed
+    rejects:
+      - "VM6926@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"    # Vm in wrong letter case
+      - "k12345@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"    # K in wrong letter case
+      - "Fo123@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"     # reserved class prefix, not listed
+
+  all_prefixes:
+    - { prefix: "AF",  max_digits: 5, collection: "Architecture - photographs" }
+    - { prefix: "AK",  max_digits: 5, collection: "Architecture - drawings" }
+    - { prefix: "AM",  max_digits: 5, collection: "Architecture - models" }
+    - { prefix: "AN",  max_digits: 5, collection: "Architecture - negatives" }
+    - { prefix: "AP",  max_digits: 5, collection: "Architecture - plans" }
+    - { prefix: "DK",  max_digits: 5, collection: "Deposited drawings" }
+    - { prefix: "DO",  max_digits: 5, collection: "Deposited paintings" }
+    - { prefix: "DP",  max_digits: 5, collection: "Deposited sculpture" }
+    - { prefix: "DR",  max_digits: 6, collection: "Deposited prints" }
+    - { prefix: "FK",  max_digits: 5, collection: "Facsimile drawings" }
+    - { prefix: "FO",  max_digits: 5, collection: "Facsimile paintings" }
+    - { prefix: "FoD", max_digits: 5, collection: "Auxiliary photo records - slides" }
+    - { prefix: "FoN", max_digits: 5, collection: "Auxiliary photo records - negatives" }
+    - { prefix: "FoP", max_digits: 5, collection: "Auxiliary photo records - photographic prints" }
+    - { prefix: "FP",  max_digits: 5, collection: "Facsimile sculpture" }
+    - { prefix: "FR",  max_digits: 6, collection: "Facsimile prints" }
+    - { prefix: "K",   max_digits: 5, collection: "Drawings" }
+    - { prefix: "Nm",  max_digits: 5, collection: "New media" }
+    - { prefix: "O",   max_digits: 5, collection: "Paintings" }
+    - { prefix: "P",   max_digits: 5, collection: "Sculpture" }
+    - { prefix: "R",   max_digits: 6, collection: "Prints and graphics" }
+    - { prefix: "VK",  max_digits: 5, collection: "Loaned drawings" }
+    - { prefix: "Vm",  max_digits: 5, collection: "Asian art - paintings" }
+    - { prefix: "VO",  max_digits: 5, collection: "Loaned paintings" }
+    - { prefix: "Vp",  max_digits: 5, collection: "Asian art - sculpture" }
+    - { prefix: "VP",  max_digits: 5, collection: "Loaned sculpture" }
+    - { prefix: "VR",  max_digits: 6, collection: "Loaned prints" }
+    - { prefix: "Vu",  max_digits: 5, collection: "Asian art - applied arts" }
+    - { prefix: "VVm", max_digits: 5, collection: "Loaned Asian painting" }
+    - { prefix: "VVp", max_digits: 5, collection: "Loaned Asian sculpture" }
+    - { prefix: "VVu", max_digits: 5, collection: "Loaned Asian applied arts" }
+    - { prefix: "VVx", max_digits: 5, collection: "Loaned Asian study material" }
+    - { prefix: "Vx",  max_digits: 5, collection: "Asian art - study material" }
+
+  classifier_pattern: "^[A-Za-z]{1,3}\\d{1,6}(?:-(?!000)\\d{3})?$"
+
+
+# =============================================================================
+# 3. TYPE-SUFFIX (formerly "varianta")
+# =============================================================================
+
+type:
+  description: "Shot type code (letter + optional 2-digit sequence number) and camera suffix separated by -"
+  pattern: "{letter}{nn}-{suffix}"
+  rules:
+    - "For prefixes F, I, R: the format {prefix}{nn}-{suffix} is mandatory."
+    - "For prefixes N, U, X: the format can be {prefix}{nn}-{suffix} or {prefix}-{suffix}."
+    - "For prefix Z: the format is Z-{suffix} (explicitly has no sequence number / {nn})."
+    - "The type describes the PURPOSE of the shot, not the medium of the original; this applies to auxiliary photo records too (invno.prefix_logic.auxiliary_photo_records)."
+    - "A retired type (type.retired) is not a convention type: a name using it is not a convention name."
+
+  codes:
+    F:
+      name: "Presentation photography"
+      description: >
+        Highest visual quality, meeting full presentation standards.
+        Intended for publication, exhibition catalogues, and public use.
+      numbering: "F01, F02, F03, ... — sequence {nn} determines the order of photographs (especially relevant for sculpture). Mandatory format: F{nn}-{suffix}."
+
+    I:
+      name: "Internal documentation"
+      description: >
+        Documentation photography primarily for internal institutional needs.
+        Includes condition reports, technical documentation, conservation records.
+        NOT expected to be published.
+      numbering: "I01, I02, I03, ... — sequence {nn} is determined by the codified dictionary. Mandatory format: I{nn}-{suffix}."
+      codified_meanings:
+        I01: "Reverse side of the artwork"
+        I02: "Frame documentation"
+        I03: "Full paper sheet (unmatted view)"
+      codified_meanings_scope: >
+        The codified meanings refer to the object BEFORE the @ anchor (the primary InvNo).
+        For auxiliary photo records this is the carrier (negative, slide, print), never the
+        depicted work Inv{InvNo}@: I01 of FoN1254-002@ is the reverse side of the negative.
+      codified_only: >
+        I{nn} is valid ONLY when I{nn} is listed in codified_meanings. I04 and higher are
+        invalid until their meaning is added to the dictionary. The dictionary is the single source: a classifier reads it from this
+        file, it is not copied into code.
+      matches:
+        - "K12345@_I01-E4A0010_-_MST-E0_20240115_Smith.jpg"
+        - "K12345@_I02-E4A0020_Matt_MST-E0_20240115_Smith.jpg"
+        - "K12345@_I03-E4A0030_-_MST-E0_20240115_Smith.jpg"
+        - "K12345@K12346@_I02-E4A0020_Matt_MST-E0_20240115_Smith.jpg"
+      rejects:
+        - "K12345@_I04-E4A0040_-_MST-E0_20240115_Smith.jpg"    # I04 not in codified_meanings
+        - "K12345@_I10-E4A0040_-_MST-E0_20240115_Smith.jpg"    # not in codified_meanings
+        - "K12345@_I99-E4A0040_-_MST-E0_20240115_Smith.jpg"    # not in codified_meanings
+        - "K12345@_I-E4A0040_-_MST-E0_20240115_Smith.jpg"      # {nn} is mandatory for I
+        - "K12345@_I1-E4A0040_-_MST-E0_20240115_Smith.jpg"     # {nn} is exactly two digits
+
+    N:
+      name: "Supplementary views"
+      description: >
+        Additional views, details, and supplementary angles with theoretical
+        potential for publication. The edition level E{n} determines readiness
+        for publication.
+      numbering: "N01, N02, ... — sequence number {nn} is optional. Legitimate formats: N{nn}-{suffix} or N-{suffix}."
+
+    R:
+      name: "Restoration documentation"
+      description: >
+        Photography documenting the restoration process — before, during,
+        and after treatment. Created by or in cooperation with restorers.
+      numbering: "R01, R02, ... — sequence {nn} determines the phase of the restoration process. Mandatory format: R{nn}-{suffix}."
+
+    U:
+      name: "User or Evidence Photography"
+      description: >
+        Visual identification photograph. Can be created by anyone in the
+        institution, not only professional photographers. Purpose is to
+        visually identify the object. NOT for publication.
+      numbering: "U01, U02, ... — sequence number {nn} is optional. Legitimate formats: U{nn}-{suffix} or U-{suffix}."
+
+    X:
+      name: "Outdated / obsolete photography"
+      description: >
+        Technically outdated or morally obsolete shot. Should not be used.
+        Publish only on explicit request of the author.
+      numbering: "X01, X02, ... — sequence number {nn} is optional. Legitimate formats: X{nn}-{suffix} or X-{suffix}."
+      # No derivatives (PMD, PRW, A3, FULL) are made from a master of type X. The master itself is kept.
+      derivatives: "none"
+
+    Z:
+      name: "RAW source file"
+      description: "Camera RAW original. Legitimate format: Z-{suffix} (no sequence number {nn}); see raw_files."
+      numbering: "Z-{suffix} (explicitly has no sequence number / {nn})"
+
+  retired:
+    # Retired in 2.0.0. Converting legacy names: MIGRATION.yaml edge_cases.retired_type_S;
+    # pipeline behavior: POLICY.yaml intake.retired_type.
+    description: >
+      Type codes that are no longer part of the convention. A name using a retired code is not
+      a convention name. The codes stay listed so that a classifier can recognise them and
+      distinguish them from an unknown type.
+    codes:
+      S:
+        name: "Negative scan (retired)"
+        former_rule: "S-{suffix}, description neg(1-6 digits)[-###]; named by the InvNo of the depicted work."
+        replaced_by: >
+          The negative is named by its own InvNo from the auxiliary photo records
+          (invno.prefix_logic.auxiliary_photo_records); the type is chosen by purpose; the
+          depicted work is description.reserved_words.Inv.
+      Sken:
+        name: "Negative scan, long legacy form (retired)"
+        former_rule: "Removed from the canonical convention already in 1.1; legacy data only."
+        replaced_by: "As S."
+    rejects:
+      - "K12345@_S-E4A0001_neg123456-001_MST-E0_20240115_Smith.tif"
+      - "O1552@_S-E4A0001_neg35987_MST-E0_20240115_Smith.tif"
+      - "K12345@_Sken-E4A0001_neg123456_MST-E0_20240115_Smith.tif"
+      - "FoN1254-002@_S-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"
+
+  suffix:
+    description: "Camera file number — enables tracing back to source RAW (populated from CameraCounter of ingest_filename)"
+    primary_source: "Original camera file sequence number (ingest_filename.camera_counter)"
+    fallback: "Timestamp (THHMMSS) when original camera filename cannot be traced during migration"
+    examples:
+      - "E4A0001"      # Fujifilm GFX series
+      - "E4A0023"      # Fujifilm GFX series
+      - "10261"         # Other camera systems
+      - "T131542"       # Timestamp fallback (migration)
+
+
+# =============================================================================
+# 4. DESCRIPTION (formerly "popis")
+# =============================================================================
+
+description:
+  description: "Free-form description field"
+
+  rules:
+    - "Empty/standard shot = '-' (dash placeholder)"
+    - "No spaces allowed — use CamelCase for multi-word keywords"
+    - "Multiple keywords joined by '-' (dash)"
+    - "A retired description word (description.retired: WEB) is not a 2.0 convention description word; presentational crop is encoded by the W flag in the edition field (size.edition_levels.presentational_flag)"
+    - "Keyword order: part### (if present) first, then all other keywords"
+    - "Auxiliary photo records (since 2.0.0): groups Inv{InvNo}@[-part###] first, then yYYYY, then all other keywords"
+    - "'-' separates the parts of the description; it is NOT written between two consecutive Inv{InvNo}@, because '@' already ends the InvNo (InvO1552-001@InvP2457@)"
+    - "'@' may appear in the description only as the end of Inv{InvNo}@"
+
+  reserved_words:
+    part:
+      description: >
+        Part of a multi-part object that has a SINGLE InvNo (the object consists of
+        several physical pieces by its nature, but the pieces have no subnumber -###).
+        Not recorded in Museion; it may (but need not) correspond to the Museion field
+        "number of pieces".
+      pattern: "part{nnn}"
+      regex: "part(?!000)\\d{3}"
+      rules:
+        - "Exactly 3 digits, range 001-999; part000 is invalid."
+        - "Canonical form is lower case; Part001 or PART001 are non-canonical spellings of part001 (see canonicalization)."
+        - "Position: first in the description field (for non-auxiliary records); all other keywords follow."
+        - "Auxiliary photo records: part### is a part of the DEPICTED work and stands directly after its Inv{InvNo}@ (InvO1552@-part001-InvP548@-part002); ascending within each work. Without a preceding Inv{InvNo}@ it is not allowed — carriers in an envelope are distinguished by the subnumber."
+        - "Several parts in one shot: part001-part002 (ascending, no duplicates)."
+        - "No part### = the shot shows the object as a whole; whole and part shots may coexist."
+        - "{nn} of the type field is numbered per part (F01...part001, F01...part002)."
+        - "Combinable with an InvNo subnumber (O12345-001@_..._part002_...) — legitimate."
+        - "Not allowed with multiple InvNo (K1@K2@_..._part001_...) — ambiguous owner of the part."
+        - "Type Z (RAW): allowed (raw_files.multi_part_form, raw_files.description)."
+        - "Malformed part-like keywords (part1, part0001, dil1, cast2, ...) are not part keywords (legacy: MIGRATION.yaml edge_cases.part_like_descriptions)."
+      matches:
+        - "K12345@_F01-E4A0001_part001_MST-E0_20240115_Smith.tif"
+        - "K12345@_F01-E4A0001_part001_FULL-E0W_20240115_Smith.jpg"
+        - "K12345@_F02-E4A0002_part001-reverz_MST-E0_20240115_Smith.tif"
+        - "K12345@_F01-E4A0003_part001-part002-RakingLight_FULL-E0W_20240115_Smith.jpg"
+        - "K12345@_I01-E4A0004_part003_MST-E0_20240115_Smith.tif"
+        - "O12345-001@_F01-E4A0005_part002_MST-E0_20240115_Smith.tif"
+        - "O123@_Z-DSC98741_part001_-_20240115_Novak.nef"
+        - "FoN1260-003@_N01-GFC2580_InvO1552@-part001-InvP548@-part002-y1954_MST-E0_20261105_Stecker.tif"
+        - "FoN1254-002@_F01-GFC2547_InvP4521@-part001-part002_MST-E0_20261105_Stecker.tif"
+      rejects:
+        - "K12345@_F01-E4A0001_part000_MST-E0_20240115_Smith.tif"          # part000 invalid
+        - "K12345@_F01-E4A0001_part1_MST-E0_20240115_Smith.tif"            # not 3 digits
+        - "K12345@_F01-E4A0001_reverz-part001_MST-E0_20240115_Smith.tif"   # wrong position
+        - "K12345@_F01-E4A0001_part001-WEB_FULL-E0_20240115_Smith.tif"     # retired WEB in description
+        - "K12345@_F01-E4A0001_part002-part001_MST-E0_20240115_Smith.tif"  # not ascending
+        - "K12345@_F01-E4A0001_part001-part001_MST-E0_20240115_Smith.tif"  # duplicate
+        - "K12345@K12346@_I02-E4A0020_part001_MST-E0_20240115_Smith.tif"   # multi-InvNo
+        - "FoN1254-002@_N01-GFC2547_part001_MST-E0_20261105_Stecker.tif"    # auxiliary: part without Inv…@
+        - "FoN1254-002@_N01-GFC2547_InvO1552@-y1954-part001_MST-E0_20261105_Stecker.tif"  # part after the year
+        - "FoN1254-002@_N01-GFC2547_InvO1552@-part002-part001_MST-E0_20261105_Stecker.tif"  # not ascending
+      canonicalization:
+        - { input: "Part001",                  result: "part001" }
+        - { input: "part001-PART002-reverz",   result: "part001-part002-reverz" }
+
+    Inv:
+      description: >
+        Depicted work: the InvNo of the work shown on an auxiliary photo record (negative,
+        slide, print). "Inv" marks the start and "@" the end of the InvNo, so the dash of a
+        subnumber (-001) is not mistaken for the separator of description words. Repeatable
+        for several depicted works. Allowed ONLY for auxiliary photo records
+        (invno.prefix_logic.auxiliary_photo_records); for any other InvNo the depicted object
+        is the InvNo before the anchor.
+      pattern: "Inv{InvNo}@"
+      regex: "Inv((?:[A-Z]{3}~)?[A-Za-z]{1,3}\\d{1,6}(?:-(?!000)\\d{3})?)@"
+      rules:
+        - "The InvNo inside meets all InvNo rules: normalization, subnumber, max_digits, prefix_validity (an invalid prefix makes the name invalid)."
+        - "Position: first in the description field, before yYYYY and all other keywords."
+        - "Several depicted works: written one after another WITHOUT a dash (InvO1552-001@InvP2457@)."
+        - "part### of a depicted work follows directly after its Inv{InvNo}@ (description.reserved_words.part)."
+        - "A bare InvNo in the description (O1552, InvO1552 without @) is not a depicted work and is not allowed."
+        - "A work outside the NGP collections would use a prefix Ex… — not established yet (open)."
+        - "The CES institutional prefix is allowed inside: InvNGA~O1552@."
+      matches:
+        - "FoN1254-002@_F01-GFC2547_InvO1552-001@InvP2457@-y1954_FULL-E0W_20261104_Stecker.jpg"
+        - "FoN1254-002@_F01-GFC2547_InvNGA~O1552@_MST-E0_20261105_Stecker.tif"
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-reverz_MST-E0_20261105_Stecker.tif"
+      rejects:
+        - "K12345@_F01-E4A0001_InvO1552@_MST-E0_20240115_Smith.tif"                        # not an auxiliary photo record
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-InvP2457@_MST-E0_20261105_Stecker.tif"        # dash between Inv…@
+        - "FoN1254-002@_F01-GFC2547_InvO1552-000@_MST-E0_20261105_Stecker.tif"              # subnumber -000
+        - "FoN1254-002@_F01-GFC2547_InvO123456@_MST-E0_20261105_Stecker.tif"                # stem exceeds max_digits
+        - "FoN1254-002@_F01-GFC2547_InvFON1@_MST-E0_20261105_Stecker.tif"                   # invalid prefix inside
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-WEB_FULL-E0_20261105_Stecker.jpg"             # retired WEB in description
+        - "FoN1254-002@_F01-GFC2547_InvO1552_MST-E0_20261105_Stecker.tif"                   # missing @
+        - "FoN1254-002@_F01-GFC2547_O1552@_MST-E0_20261105_Stecker.tif"                     # bare InvNo
+        - "FoN1254-002@_F01-GFC2547_reverz-InvO1552@_MST-E0_20261105_Stecker.tif"           # Inv after another keyword
+        - "FoN1254-002@_F01-GFC2547_InvO1552@reverz_MST-E0_20261105_Stecker.tif"            # keyword not separated by a dash
+        - "FoN1254-002@_F01-GFC2547_~O1552@_MST-E0_20261105_Stecker.tif"                    # ~ form rejected
+
+    y:
+      description: >
+        Year of origin of the auxiliary photo record: of the negative or slide; for a
+        photographic print the year of the NEGATIVE, not of the print. Written only when the
+        year is known; the database is authoritative. Allowed ONLY for auxiliary photo records:
+        for primary digitization the date field already gives the year of digitization.
+      pattern: "y{YYYY}"
+      regex: "y\\d{4}"
+      rules:
+        - "Exactly 4 digits, lower-case y; at most once."
+        - "Position: after the Inv{InvNo}@[-part###] groups (or first when depicted work is unknown), before all other keywords."
+        - "Malformed forms (y54, y195x, Y1954, the former draft r1954) are not allowed."
+      matches:
+        - "FoN1256-001@_N01-GFC2551_y1958_MST-E0_20261105_Stecker.tif"
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-y1954_FULL-E0W_20261105_Stecker.jpg"
+        - "FoN1254-002@_F01-GFC2547_InvO1552@-y1954-reverz_MST-E0_20261105_Stecker.tif"
+      rejects:
+        - "FoN1256-001@_N01-GFC2551_y54_MST-E0_20261105_Stecker.tif"
+        - "FoN1256-001@_N01-GFC2551_y195x_MST-E0_20261105_Stecker.tif"
+        - "FoN1256-001@_N01-GFC2551_Y1954_MST-E0_20261105_Stecker.tif"
+        - "FoN1256-001@_N01-GFC2551_r1954_MST-E0_20261105_Stecker.tif"
+        - "K12345@_F01-E4A0001_y1954_MST-E0_20240115_Smith.tif"                     # not an auxiliary photo record
+        - "FoN1256-001@_N01-GFC2551_y1954-InvO1552@_MST-E0_20261105_Stecker.tif"    # year before Inv…@
+        - "FoN1256-001@_N01-GFC2551_reverz-y1954_MST-E0_20261105_Stecker.tif"       # year after another keyword
+        - "FoN1256-001@_N01-GFC2551_y1954-y1955_MST-E0_20261105_Stecker.tif"        # twice
+
+    light:
+      description: >
+        Designation of the lights of the scanner used for the shot (Cruse CS295ST). It comes from the
+        input file name (ingest_filename.segments), not from keywords. A shot carries at most one light.
+        In the description it is an ordinary keyword (description.rules: after part###).
+      words:
+        LR: "Left+Right"
+        LLA: "Left Light Angle"
+        LLArev: "Left Light Angle reversed"
+        LTx: "Left Texture"
+        LTx2: "Left Texture (lower position)"
+        LTx3: "Left Texture (lowest position, raking light)"
+        RLA: "Right Light Angle"
+        RLArev: "Right Light Angle reversed"
+        RTx: "Right Texture"
+        RTx2: "Right Texture (lower position)"
+        RTx3: "Right Texture (lowest position, raking light)"
+      rules:
+        - "Matching in an input name is case-insensitive; the output carries the canonical form of words."
+        - "At most one light in a description; a word similar to a light (LTx4, LLArev2) is not a light."
+      matches:
+        - "O1234@_F01-CRS0123_LR_MST-E0_20251220_Fotograf.tif"
+        - "O1234@_F01-CRS0123_LR_FULL-E0W_20251220_Fotograf.jpg"
+        - "O1234@_F01-CRS0123_part001-RTx3_MST-E0_20251220_Fotograf.tif"
+        - "O1234@_Z-CRS0123_LLArev_-_20251220_Fotograf.tif"
+      rejects:
+        - "O1234@_F01-CRS0123_LR-LLA_MST-E0_20251220_Fotograf.tif"       # two lights
+        - "O1234@_F01-CRS0123_RTx3-part001_MST-E0_20251220_Fotograf.tif" # part### after another keyword
+
+  retired:
+    # Retired in 2.0.0. Interpreting historical 1.x output names with WEB in description:
+    # MIGRATION.yaml legacy_web_in_description; input forms and keywords from photographers
+    # continue to use WEB as an ingest marker (ingest_filename, POLICY.yaml intake).
+    description: >
+      Words that are no longer part of the output convention description field. An output
+      filename using a retired word in the description is not a 2.0 convention name (rejected
+      under 2.0). In consolidation (and until legacy production transitions), documented 1.x
+      names with WEB in the description are interpreted without renaming on disk according to
+      MIGRATION.yaml legacy_web_in_description.
+    words:
+      WEB:
+        name: "Presentational crop in description (retired)"
+        former_rule: "First word in the description field (WEB or WEB-...), marking files cropped to artwork only without target."
+        replaced_by: >
+          Presentational flag W appended to the edition level (size.edition_levels.presentational_flag:
+          FULL-E0W, FULL-ErW, FULL-E1W, PMD-E0W, PRW-E0W, ...). Ingest filenames and keywords from
+          photographers continue to use WEB as an input marker (ingest_filename).
+    rejects:
+      - "K12345@_F01-E4A0001_WEB_FULL-E0_20240115_Smith.jpg"
+      - "K12345@_F01-E4A0001_WEB-part001_FULL-E0_20240115_Smith.jpg"
+      - "K12345@_F01-E4A0001_part001-WEB_FULL-E0_20240115_Smith.jpg"
+      - "FoN1254-002@_F01-GFC2547_WEB-InvO1552@-y1954_FULL-E0_20261105_Stecker.jpg"
+      - "FoN1254-002@_F01-GFC2547_InvO1552@-WEB_FULL-E0_20261105_Stecker.jpg"
+
+  examples:
+    - { value: "-",                                meaning: "Standard frontal shot, no description" }
+    - { value: "reverz",                           meaning: "Reverse side (only if equal value as front; otherwise I01)" }
+    - { value: "detail",                           meaning: "Detail / close-up" }
+    - { value: "RakingLight",                      meaning: "Single multi-word keyword in CamelCase" }
+    - { value: "RakingLight-CrossPolarization",    meaning: "Two distinct keywords joined by dash" }
+    - { value: "Matt",                             meaning: "Matted frame view with mounted works (used with I02)" }
+    - { value: "part001",                          meaning: "Part 1 of a multi-part object with a single InvNo" }
+    - { value: "part002-reverz",                   meaning: "Reverse side of part 2" }
+    - { value: "InvO1552@-y1954",                  meaning: "Auxiliary photo record: depicted work O1552, year of origin 1954" }
+    - { value: "InvO1552@-part001-InvP548@-part002-y1954", meaning: "Auxiliary photo record: part 1 of O1552 and part 2 of P548" }
+
+
+# =============================================================================
+# 5. SIZE-E{n}[W] (formerly "velikost")
+# =============================================================================
+
+size:
+  description: "File type/size code followed by edition level E and optional presentational crop flag W"
+
+  types:
+    MST:
+      name: "Master"
+      description: >
+        Full resolution, native color space. A single shot (type{nn}-{suffix}) may have
+        multiple MST files only with different edition levels (E0, Er, E1, ...); MST never
+        carries the presentational flag W.
+      file_format: { extension: "tif", color_space: "eciRGB v2" }
+      # ICC profile descriptions recognized for a master, with their exact wording. color_space above
+      # is the default and the target when a master with another profile is converted.
+      # "eciRGB v2 ICCv4" from Capture One is the same colour definition in ICC v4.
+      # "Adobe RGB (1998)" is recognized too; a master with another profile is
+      # converted to eciRGB v2 (POLICY derivatives.master_conversion).
+      # The exact description of every master is recorded in its metadata file (technical.icc_profile_name).
+      recognized_profile_descriptions: ["eciRGB v2", "eciRGB v2 ICCv4", "Adobe RGB (1998)"]
+      delivered_format:
+        extension: "tif"
+        bit_depth: 8
+        compression: "lzw"
+        note: >
+          A delivered master TIF of any type (X included) with another bit depth is converted to 8 bit
+          by the pipeline (POLICY derivatives.master_bit_depth).
+      allows_w: false
+      per_type:
+        I: { extension: "jpg", color_space: "sRGB" }
+        N: "tif (eciRGB v2) or jpg (sRGB)"
+        # No fixed rule for the master format of U, R, X.
+        U: "no fixed rule"
+        R: "no fixed rule"
+        X: "no fixed rule"
+    MST-HR:
+      name: "Master HR"
+      description: "High-resolution composite master (composite images); never carries W"
+      file_format: { extension: "tif", color_space: "eciRGB v2" }
+      allows_w: false
+    A3:
+      name: "A3 print"
+      description: "24 megapixels, 300 DPI, the profile of its MST; never carries W"
+      file_format: { extension: "tif", color_space: "eciRGB v2" }
+      # A3 carries the same profile as its MST (Adobe RGB master -> Adobe RGB A3,
+      # eciRGB master -> eciRGB A3); a master with another profile is converted first, so its A3 is
+      # eciRGB v2 too. Same list as size.types.MST.recognized_profile_descriptions.
+      recognized_profile_descriptions: ["eciRGB v2", "eciRGB v2 ICCv4", "Adobe RGB (1998)"]
+      allows_w: false
+    FULL:
+      name: "sRGB full resolution"
+      description: >
+        Full resolution sRGB JPEG. Always JPG in sRGB — a TIF with FULL does not exist as an
+        output convention name. FULL-E{n}W.jpg is the only file carrying irreplaceable human
+        work of the presentational crop.
+        Exception: FULL-E{n}W.tif is allowed only as the TRANSIENT name of the crop TIF delivered
+        by the photographer, between renaming and the end of the pipeline run; at the end of the
+        run it moves to to_delete (POLICY.yaml disposal.to_delete). It is never a repository
+        output.
+      file_format: { extension: "jpg", color_space: "sRGB" }
+      transient_format: { extension: "tif", requires_w: true, disposal: "to_delete at the end of the pipeline run" }
+      allows_w: true
+    PRW:
+      name: "sRGB preview"
+      description: "3000px long edge, sRGB JPEG"
+      file_format: { extension: "jpg", color_space: "sRGB" }
+      allows_w: true
+    PMD:
+      name: "sRGB pyramidal"
+      description: "Tiled TIFF for IIIF, sRGB"
+      file_format: { extension: "tif", color_space: "sRGB" }
+      allows_w: true
+  # Encoding parameters, derivative sources, IIIF and Ex processing: POLICY.yaml
+
+  edition_levels:
+    Ex:
+      name: "Unprocessed"
+      description: >
+        Edited in RAW only, nothing else. Constraint: IF a RAW source file (Z) exists, no MST-Ex is
+        retained — only the derivatives FULL-Ex, PMD-Ex and PRW-Ex remain.
+        For types that do not have RAW originals (such as type U - mobile captures or type R), and
+        where MST-Ex is the only available original file, it is preserved in full master size
+        (MST-Ex) to prevent losing the original high-resolution data.
+        If a RAW source file exists, manual processing and upgrade to E0 is required to produce
+        a master (MST-E0). Ex is never presentational (never ExW). How the pipeline handles
+        MST-Ex: POLICY.yaml derivatives.ex_processing.
+    E0:
+      name: "Primary (standard) processing"
+      description: >
+        Edited in RAW and, where needed, afterwards in Photoshop, so that the image meets both
+        ISO 19264 (FADGI, Metamorfoze) and the institution's visual standard.
+    Er:
+      name: "Retouched technical defects"
+      description: >
+        E0 plus manual retouching of technical defects (e.g. stripes from scanning). The condition
+        of the artwork itself is never altered.
+    E1:
+      name: "Additional edit"
+      description: "Any further edit beyond Er, based on requirements or photographer's judgment."
+    E2:
+      name: "Further additional edit"
+      description: "Further additional edit beyond E1."
+
+    presentational_flag:
+      flag: "W"
+      case_sensitive: true
+      meaning: >
+        Presentational crop: cropped to the artwork without target/scale, optionally rotated or
+        masked along curves. The sRGB color space follows from the size
+        type (FULL, PRW, PMD), not from W itself.
+      allowed_size_types: ["FULL", "PRW", "PMD"]
+      forbidden_size_types: ["MST", "MST-HR", "A3"]
+      allowed_base_levels: ["E0", "Er", "E1", "E2"]
+      forbidden_base_levels: ["Ex"]
+      human_work: >
+        The only output file containing irreplaceable human crop/rotation work is FULL-E{n}W in
+        JPG format. PMD-E{n}W and PRW-E{n}W are computed derivatives (either
+        from FULL-E{n}W or, for sculptures without WEB in input, directly from MST-E{n}; see
+        POLICY.yaml derivatives.presentational).
+
+    pattern:
+      description: >
+        Closed case-sensitive pattern for the edition token after {size}-. Validates both the
+        base edition level (Ex, E0, Er, E1, ...) and the optional presentational flag W (never
+        allowed on Ex). Combination with size type (MST-E0W, A3-E0W forbidden) is enforced by
+        size.types.*.allows_w / presentational_flag.allowed_size_types.
+      regex: "^(Ex|(?:E0|Er|E[1-9]\\d*)W?)$"
+      matches:
+        - "E0"
+        - "Er"
+        - "Ex"
+        - "E1"
+        - "E0W"
+        - "ErW"
+        - "E2W"
+        - "E3W"
+        - "E12"
+      rejects:
+        - "E0w"
+        - "ExW"
+        - "EX"
+        - "ER"
+        - "E7Q"
+        - "E"
+        - "E01"
+
+    order:
+      description: >
+        Machine-readable order of the edition levels, lowest first. Base order without W:
+        Ex < E0 < Er < E1 < E2. Order with presentational flag W: E0W < ErW < E1W < E2W.
+        Source selection precedence (W takes priority over non-W,
+        then higher edition) is pipeline behavior defined in POLICY.yaml derivatives.pmd.
+      sequence: ["Ex", "E0", "Er", "E1", "E2"]
+      sequence_with_w: ["E0W", "ErW", "E1W", "E2W"]
+      continuation: >
+        The number of levels is not limited: after E2 follow E3, E4, ... (and E3W, E4W, ...),
+        ordered by number.
+
+  matches:
+    - "K12345@_F01-E4A0001_-_FULL-E0W_20240115_Smith.jpg"
+    - "K12345@_F01-E4A0001_-_FULL-ErW_20240115_Smith.jpg"
+    - "K12345@_F01-E4A0001_-_PRW-E1W_20240115_Smith.jpg"
+    - "P4521@_F01-E4A0012_-_PMD-E0W_20240115_Smith.tif"
+    - "P4521@_F01-E4A0012_-_PRW-E0W_20240115_Smith.jpg"
+  rejects:
+    - "K12345@_F01-E4A0001_-_MST-E0W_20240115_Smith.tif"       # MST never carries W
+    - "K12345@_F01-E4A0001_-_MST-HR-E0W_20240115_Smith.tif"    # MST-HR never carries W
+    - "K12345@_F01-E4A0001_-_A3-E0W_20240115_Smith.tif"        # A3 never carries W
+    - "K12345@_F01-E4A0001_-_FULL-ExW_20240115_Smith.jpg"      # Ex never carries W
+    - "K12345@_F01-E4A0001_-_FULL-E0w_20240115_Smith.jpg"      # lowercase w invalid
+    - "K12345@_F01-E4A0001_-_FULL-E01_20240115_Smith.jpg"      # leading zero in edition invalid
+
+  examples: ["MST-E0", "A3-E0", "FULL-E0W", "FULL-ErW", "PRW-E1W", "PMD-E0W", "FULL-E0", "PRW-E1", "PMD-E0", "PRW-Ex"]
+
+
+# =============================================================================
+# STRUCTURAL FILES
+# Files describing or documenting digital objects.
+# Two categories according to the name anchor.
+# =============================================================================
+structural_files:
+
+  object_level:
+    pattern: "{InvNo}_{type}.{ext}"
+    description: >
+      Files related to the object as a whole.
+      Name anchored on InvNo - without the @ separator.
+      Not bound to a specific shot or photographer.
+    types:
+      # Two manifests per object: the audience is encoded in
+      # the name. Which canvases each one contains is decided by the policy of the institution.
+      manifest:
+        ext: json
+        example: "K1186_manifest.json"
+        note: "IIIF Presentation API manifest, internal audience (not _iiif, not _iiif-manifest)"
+      manifest_public:
+        ext: json
+        example: "K1186_manifest_public.json"
+        note: "IIIF Presentation API manifest, public audience (suffix _public)"
+      mets:
+        ext: xml
+        example: "K1186_mets.xml"
+        note: "METS structural metadata"
+      premis:
+        ext: xml
+        example: "K1186_premis.xml"
+        note: "PREMIS preservation metadata"
+      inventory:
+        ext: json
+        example: "K1186_inventory.json"
+        note: "Inventory of the object's files"
+
+  references:
+    at_sign: >
+      '@' is part of the file name: it separates the InvNo from the other fields and makes the
+      InvNo machine-detectable. It must therefore stay literal wherever the name is used as a
+      reference (METS xlink:href, PREMIS identifiers, IIIF URLs) and is never percent-encoded
+      as %40 — RFC 3986 allows '@' in a path segment.
+
+  file_level:
+    pattern: "{filename_without_extension}_{type}.{ext}"
+    description: >
+      Files related to a specific shot.
+      Name derived from the parent file - keeps the @ separator
+      and all segments of the convention name.
+    types:
+      jhove:
+        ext: xml
+        example: "K1186@_F01-PHA10231_-_MST-E0_20260311_Stecker_jhove.xml"
+        note: "JHOVE validation report of the parent MST file"
+
+
+# =============================================================================
+# 6. DATE
+# =============================================================================
+
+date:
+  pattern: "YYYYMMDD"
+  meaning: "Capture date of the image (EXIF DateTimeOriginal)"
+  example: "20240115"
+
+
+# =============================================================================
+# 7. PHOTOGRAPHER
+# =============================================================================
+
+photographer:
+  description: >
+    Surname of the photographer, ASCII without diacritics (e.g. Novák -> Novak).
+  examples: ["Novak", "Smith"]
+
+
+# =============================================================================
+# 8. RAW FILES
+# =============================================================================
+
+raw_files:
+  description: "Camera RAW files use Z type code with full convention fields"
+  pattern: "{InvNo}@_Z-{suffix}_{description}_{size}_{date}_{photographer}.{raw_ext}"
+  standard_form: "{InvNo}@_Z-{camera_number}_-_-_{date}_{photographer}.{raw_ext}"
+  example: "K12345@_Z-E4A0001_-_-_20240115_Smith.raf"
+  note: "Description = '-', Size = '-' (no size designation for RAW)"
+  multi_part_form: "{InvNo}@_Z-{camera_number}_part{nnn}_-_{date}_{photographer}.{raw_ext}"
+  multi_part_example: "O123@_Z-DSC98741_part001_-_20240115_Novak.nef"
+  multi_part_note: "Description of a RAW is '-' or part###."
+  description: >
+    The description of a RAW carries only words about the OBJECT, never about processing:
+    '-', part###, and for auxiliary photo records also Inv{InvNo}@ and yYYYY, in the order of
+    description.rules. Exception: the light of the shot
+    (description.reserved_words.light) may stand in the description of type Z, because it
+    describes the capture, not the processing. Other keywords are not used in a RAW name.
+  auxiliary_form: "{InvNo}@_Z-{camera_number}_Inv{InvNo}@[-part{nnn}][-y{YYYY}]_-_{date}_{photographer}.{raw_ext}"
+  auxiliary_example: "FoN1254-002@_Z-GFC2547_InvO1552@-y1954_-_20261105_Stecker.raf"
+  matches:
+    - "FoN1254-002@_Z-GFC2547_InvO1552@-y1954_-_20261105_Stecker.raf"
+    - "FoN1256-001@_Z-GFC2551_y1958_-_20261105_Stecker.raf"
+    - "O1234@_Z-CRS0123_-_-_20251220_Fotograf.tif"          # source TIF (source_tif)
+    - "O1234@_Z-CRS0123_LR_-_20251220_Fotograf.tif"         # with the light
+    - "O1234@_Z-PHA3456_-_-_20251220_Fotograf.eip"
+  rejects:
+    - "O1234@_Z-CRS0123_-_-_20251220_Fotograf.jpg"          # jpg is neither a RAW nor a source TIF
+    - "O1234@_Z-CRS0123_-_MST-E0_20251220_Fotograf.tif"     # a source shot has no size
+  source_tif:
+    description: >
+      A source shot delivered as an untouched TIF (scanner Cruse CS295ST, which gives no RAW). It is
+      handled as a RAW in every respect: renamed to raw_files.pattern with type Z, kept untouched,
+      paired with its master, recorded with its hash. The input name must carry the segment _Z
+      (ingest_filename.segments.source_marker); a TIF without _Z is a data file (a master).
+    extensions: ["tif"]
+    bit_depth: 16
+    compression: "none"
+    color_profile: "the profile of the device (scanner), not eciRGB or sRGB"
+    input_example: "O1234@_CRS0123_Z_LR.tif"
+    output_example: "O1234@_Z-CRS0123_LR_-_20251220_Fotograf.tif"
+  keywords:
+    shot_type: >
+      Every source shot (RAW or source TIF) carries its shot type (F/I/N/R/U with {nn}) either in its
+      name (ingest_filename.segments) or in its keywords. It serves only for pairing with the master;
+      the output type of a source shot is always Z.
+    dt_versa:
+      extensions: ["eip", "iiq"]
+      required_keywords: ["ppi"]        # ingest_filename.keyword_tokens.ppi, e.g. 300ppi
+      note: >
+        The keywords of a DT Versa RAW are assigned in Capture One and written into the exported
+        tif/jpg; the export recipe is chosen by them. Capture One keeps them inside the eip package
+        (CaptureOne/Settings*/*.cos), not as embedded metadata.
+    verification: >
+      The convention requires these keywords; pipeline 2.1 does not verify their presence in a source
+      shot (POLICY intake.source_shot_keywords).
+  # eip = Capture One package (IIQ + settings); iiq = plain PhaseOne RAW — both actually used
+  extensions: ["raf", "cr2", "cr3", "nef", "dng", "arw", "iiq", "eip"]
+  sidecar_extensions: ["xmp", "dcp", "pts"]
+  sidecar_naming: "A sidecar has exactly the name of its RAW (incl. @_Z); only the extension differs."
+
+
+# =============================================================================
+# 9. INGEST (INPUT) FILENAMES FROM PHOTOGRAPHERS
+# =============================================================================
+# Single source of input filename grammar.
+# Pipeline behavior (priority of metadata sources, fallbacks, renaming to output convention
+# names, reporting) is defined in POLICY.yaml intake.
+
+ingest_filename:
+  description: >
+    Grammar of input (ingest) filenames delivered by photographers before pipeline renaming.
+    An ingest filename is NOT a convention name — it is the input to the renaming step (A1),
+    which produces a 5-field convention filename (section 1) or RAW convention filename
+    (section 8). Recording this grammar in one place is essential for other institutions
+    adopting the convention: the output convention (sections 1-8) is universal, whereas the
+    ingest filename reflects NGP studio workflow and another institution may replace it with
+    its own input naming.
+  base_regex: "^(.+?)@_([^_.]+)(?:_([^.]+))?\\.([A-Za-z0-9]+)$"
+  primary_form:
+    pattern: "{InvNo}@_{CameraCounter}.{ext}"
+    description: >
+      Primary input form. The filename carries only the InvNo (one
+      or more, terminated by @) and the camera file counter. All other attributes — shot type
+      (F01, I01, I02, ...), photographer, presentational crop marker (WEB), edition level
+      (E1, Er, Ex; default E0), part### and description keywords — are read from embedded
+      IPTC/XMP metadata (Keywords, Subject, leaf of HierarchicalSubject).
+    examples:
+      - { input: "K12345@_E4A0001.tif + keywords [F01, Smith]",       result: "K12345@_F01-E4A0001_-_MST-E0_20240115_Smith.tif" }
+      - { input: "K12345@_E4A0001.tif + keywords [F01, WEB, Smith]",  result: "K12345@_F01-E4A0001_-_FULL-E0W_20240115_Smith.jpg" }
+      - { input: "O123@_DSC98741.nef + keyword [part001]",            result: "O123@_Z-DSC98741_part001_-_20240115_Novak.nef" }
+  fallback_form:
+    pattern: "{InvNo}@_{CameraCounter}_{Photographer}_{type}_{WEB}.{ext}"
+    description: >
+      Fallback input form when attributes are passed as underscore-separated filename segments
+      after {CameraCounter}_ instead of (or in addition to) embedded keywords.
+      Also covers RAW input forms with part### in the filename stem (formerly in POLICY.yaml
+      intake.raw_input_forms).
+    raw_with_photographer:
+      pattern: "{InvNo}@_{CameraCounter}_{Surname}[_part###].{raw_ext}"
+      description: >
+        A RAW may carry the photographer's surname after the camera counter, optionally followed by
+        part###. The surname is a single word of ASCII letters (at least two), never a keyword token
+        (WEB, an edition level, Composite) and never a shot type. Since 2.3.0-draft a RAW
+        input name may also carry a shot type for pairing, a light and the source marker _Z, in any
+        order (ingest_filename.segments); WEB, an edition level and Composite stay not allowed in a
+        RAW input name.
+      surname_regex: "^[A-Za-z]{2,}$"
+      # A surname must not be a keyword token (keyword_tokens: shot_type, presentational_crop, edition,
+      # part), a retired type code (type.retired.codes) or one of these words (case-insensitive).
+      excluded_words: ["Composite"]
+      matches:
+        - "O123@_E4A0001_Novak.CR2"
+        - "O123@_E4A0001_Novak_part001.cr2"
+        - "FoN1254-002@_GFC2547_Stecker.raf"
+        - "O123@_E4A0001_Novak_F01.cr2"          # since 2.3.0-draft: a shot type for pairing
+        - "O1234@_PHA3456_F01_Fotograf.eip"
+        - "O1234@_PHA3456_Z_F01_Fotograf.eip"    # _Z allowed, not mandatory, with a RAW extension
+        - "O123@_E4A0001_X.cr2"                  # since 2.3.0-draft: X is a shot type for pairing, not a surname (rejected until 2.2.0)
+      rejects:
+        - "O123@_E4A0001_WEB.cr2"                 # keyword token, not a surname
+        - "O123@_E4A0001_Er.cr2"                  # edition level, not a surname
+        - "O123@_E4A0001_Novak_Smith.cr2"         # two words
+        - "O123@_E4A0001_Novak1.cr2"             # digit in the surname
+        - "O123@_E4A0001_F01_I01.cr2"             # two different shot types for pairing
+    examples:
+      - { input: "K12345@_E4A0001_Smith_F01_WEB.tif",  result: "K12345@_F01-E4A0001_-_FULL-E0W_20240115_Smith.jpg" }
+      - { input: "K12345@_E4A0001_Smith_I01.tif",      result: "K12345@_I01-E4A0001_-_MST-E0_20240115_Smith.jpg" }
+      - { input: "O123@_DSC98741_part001.nef",         result: "O123@_Z-DSC98741_part001_-_20240115_Novak.nef" }
+      - { input: "O123@_part001_DSC98741.nef",         result: "O123@_Z-DSC98741_part001_-_20240115_Novak.nef" }
+      - { input: "O123@_DSC98741_Novak.nef",           result: "O123@_Z-DSC98741_-_-_20240115_Novak.nef" }
+      - { input: "O123@_DSC98741_Novak_part001.nef",   result: "O123@_Z-DSC98741_part001_-_20240115_Novak.nef" }
+  segments:
+    description: >
+      Segments of an input name after "@_" (split by "_") are told apart by lists, not by their
+      order (since 2.3.0-draft; until 2.2.0 the camera counter was always the first segment). Every
+      segment belongs to one class below. The camera counter is the segment that matches no list.
+      When a segment cannot be put into one class (two lights, two candidates for the camera counter,
+      none), the name is not an ingest form; pipeline 2.1 reports it and the operator decides
+      (POLICY intake.ingest_segments).
+    classes:
+      part: "keyword_tokens.part"
+      presentational_crop: "keyword_tokens.presentational_crop (WEB; not in a source shot name)"
+      edition: "keyword_tokens.edition (not in a source shot name)"
+      shot_type: "keyword_tokens.shot_type without Z; at most one distinct type in a source shot name"
+      source_marker: "the segment Z (case-insensitive): marks a source shot (raw_files.source_tif)"
+      light: "description.reserved_words.light (case-insensitive), at most one"
+      composite: "the word Composite (not in a source shot name)"
+      photographer: >
+        a surname (fallback_form.raw_with_photographer.surname_regex): a word of letters only. A
+        surname from the photographer registry of the pipeline
+        is always a photographer; other letter-only words are candidates, the last one is the
+        photographer
+      camera_counter: >
+        the remaining segment; it contains at least one digit (INGEST counter pattern
+        ^[A-Za-z0-9]{1,20}$). Exactly one such segment is required. When no segment has a digit, a
+        single letter-only word outside the registry is the counter.
+    source_marker:
+      rule: >
+        _Z is mandatory in the input name of a source TIF (raw_files.source_tif.extensions); with a RAW
+        extension (raw_files.extensions) it is allowed and not needed. _Z with another extension is
+        not an ingest form.
+      pattern: "{InvNo}@_{CameraCounter}_Z[_{segments}].{ext}"
+    matches:
+      - "O1234@_CRS0123_Z.tif"
+      - "O1234@_CRS0123_Z_LR.tif"
+      - "O1234@_LR_CRS0123_Z.tif"
+      - "O1234@_Z_CRS0123_LR.tif"
+      - "O1234@_CRS0123_Z_LR_Novak.tif"
+      - "O1234@_CRS0123_Z_LR_F01_Fotograf.tif"
+      - "O1234@_CRS0123_LR.tif"               # without _Z: a data file (master)
+      - "O1234@_CRS0124_LLA.jpg"
+      - "O1234@_CRS0123_ltx2_Z.tif"           # any letter case of a light
+      - "O1234@_PHA3456_F01_Fotograf.eip"
+      - "O123@_E4A0001_LLA.CR2"               # a light, not a surname
+    examples:
+      - { input: "O1234@_CRS0123_Z.tif",                  result: "O1234@_Z-CRS0123_-_-_20251220_Fotograf.tif" }
+      - { input: "O1234@_CRS0123_Z_LR.tif",               result: "O1234@_Z-CRS0123_LR_-_20251220_Fotograf.tif" }
+      - { input: "O1234@_LR_CRS0123_Z.tif",               result: "O1234@_Z-CRS0123_LR_-_20251220_Fotograf.tif" }
+      - { input: "O1234@_CRS0123_LR.tif + keyword [F01]", result: "O1234@_F01-CRS0123_LR_MST-E0_20251220_Fotograf.tif" }
+      - { input: "O1234@_CRS0123_LR_WEB.jpg",             result: "O1234@_F01-CRS0123_LR_FULL-E0W_20251220_Fotograf.jpg" }
+      - { input: "O1234@_PHA3456_F01_Fotograf.eip + keyword [300ppi]", result: "O1234@_Z-PHA3456_-_-_20251220_Fotograf.eip" }
+  camera_counter:
+    description: >
+      Camera file sequence number: the segment after "@_" that matches no list (segments; until
+      2.2.0 group 2 of base_regex). Maps directly to type.suffix in the
+      output convention filename ({type}-{suffix}), preserving the link between the RAW source
+      (Z-{suffix}), the master (MST), and all derivatives.
+    target_field: "type.suffix"
+  keyword_tokens:
+    description: >
+      Tokens recognized in embedded keywords and in fallback filename segments after
+      {CameraCounter}_ (case-insensitive matching at intake; canonicalized in the output name).
+    shot_type:
+      regex: "^(?i:[FINRUX]\\d{2}|[NUX]|Z)$"
+      note: "Shot type code (section 3)."
+    presentational_crop:
+      token: "WEB"
+      regex: "(?i)\\bweb\\b"
+      meaning: >
+        Marks a presentational crop delivered by the photographer. The word WEB exists ONLY in the
+        ingest filename or input keywords; in the
+        2.0 output convention filename it is translated to the W flag on the edition level
+        (FULL-E{n}W) and never written into the description field. Ignored for types I
+        and N.
+    edition:
+      regex: "(?i)\\b(ex|er|e[0-9]+)\\b"
+      default: "E0"
+      note: "Edition level token. When absent, defaults to E0."
+    part:
+      regex: "(?i)^part(?!000)\\d{3}$"
+      note: "Object part token (description.reserved_words.part); normalized to lowercase part###."
+    light:
+      words: "description.reserved_words.light.words (case-insensitive)"
+      note: >
+        Read from filename segments only (the scanner software writes it to the
+        name). A light word in keywords is not a light token.
+    ppi:
+      regex: "(?i)^(\\d+)ppi$"
+      example: "300ppi"
+      meaning: >
+        Resolution for the export script of DT Versa (raw_files.keywords.dt_versa). Never written into
+        an output file name; pipeline 2.1 records the value in the metadata file of the shot
+        (METADATA.schema.json input.ppi).
+  matches:
+    - "K12345@_E4A0001.tif"
+    - "O123@_DSC98741.nef"
+    - "K12345@_E4A0001_Smith_F01_WEB.tif"
+    - "K12345@_E4A0001_Smith_I01.tif"
+    - "O123@_DSC98741_part001.nef"
+    - "O123@_part001_DSC98741.nef"
+    - "FoN1254-002@_GFC2547_Stecker_F01_WEB.tif"
+    - "O123@_DSC98741_Novak.nef"                # RAW with the photographer's surname
+    - "O123@_DSC98741_Novak_part001.nef"
+  rejects:
+    - "K12345_E4A0001.tif"              # missing @_ anchor
+    - "@_E4A0001.tif"                   # missing InvNo
+    - "K12345@_.tif"                    # missing CameraCounter
+    - "K12345@_E4A0001"                 # missing extension
+    - "FON1254-002@_GFC2547.tif"        # invalid InvNo prefix FON
+    - "O12345-000@_E4A0001.tif"         # invalid subnumber -000
+    - "O1234@_CRS0123_Z.jpg"            # _Z only with a source extension (raw_files.extensions, source_tif)
+    - "O1234@_CRS0123_LR_LLA_Z.tif"     # two lights
+    - "O1234@_CRS0123_LTx4_Z.tif"       # LTx4 is not a light: two segments may be the camera counter
+    - "O1234@_CRS0123_LLArev2.tif"      # LLArev2 is not a light: two segments may be the camera counter
+    - "O1234@_LR_Z.tif"                 # no segment is the camera counter
+    - "O123@_ABC_Novak.cr2"             # no segment with a digit: counter and surname cannot be told apart
+
+
+# =============================================================================
+# 10. COMPLETE EXAMPLES
+# =============================================================================
+
+examples:
+  - description: "Standard master (frontal, no description)"
+    filename: "K12345@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+  - description: "Master with description (reverse side)"
+    filename: "K12345@_F02-E4A0023_reverz_MST-E0_20240320_Smith.tif"
+
+  - description: "Presentational crop (human-edited full resolution sRGB JPEG, W in edition)"
+    filename: "K12345@_F01-E4A0001_-_FULL-E0W_20240115_Smith.jpg"
+
+  - description: "Internal documentation (reverse side)"
+    filename: "K12345@_I01-E4A0010_-_MST-E0_20240115_Smith.tif"
+
+  - description: "RAW file (camera original)"
+    filename: "K12345@_Z-E4A0001_-_-_20240115_Smith.raf"
+
+  - description: "Multiple objects — matted frame view (I02)"
+    filename: "K12345@K12346@_I02-E4A0020_Matt_MST-E0_20240115_Smith.tif"
+
+  - description: "Evidence photo (visual identification)"
+    filename: "K12345@_U01-IMG2041_-_MST-Ex_20240115_Novak.jpg"
+
+  - description: "Restoration documentation"
+    filename: "K12345@_R01-E4A0050_BeforeRestoration_MST-E0_20240115_Smith.tif"
+
+  - description: "Supplementary detail with publication potential"
+    filename: "K12345@_N01-E4A0030_detail_MST-E1_20240115_Smith.tif"
+
+  - description: "Obsolete photography (with sequence number)"
+    filename: "K12345@_X01-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+  - description: "Obsolete photography (without sequence number)"
+    filename: "K12345@_X-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+  - description: "Auxiliary photo record: negative fit for presentation, depicted work and year (master inverted to positive)"
+    filename: "FoN1254-002@_F01-GFC2547_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: RAW keeps the negative form and the same link to the work"
+    filename: "FoN1254-002@_Z-GFC2547_InvO1552@-y1954_-_20261105_Stecker.raf"
+
+  - description: "Auxiliary photo record: presentational crop, W in edition"
+    filename: "FoN1254-002@_F01-GFC2547_InvO1552@-y1954_FULL-E0W_20261105_Stecker.jpg"
+
+  - description: "Auxiliary photo record: slide (already positive)"
+    filename: "FoD3021-001@_N01-GFC2560_InvP2457@-y1962_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: print with its own InvNo, year of the negative"
+    filename: "FoP412@_F01-GFC2570_InvO1552@-y1954_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: parts of two depicted works"
+    filename: "FoN1260-003@_N01-GFC2580_InvO1552@-part001-InvP548@-part002-y1954_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: depicted work unknown, year known"
+    filename: "FoN1256-001@_N01-GFC2551_y1958_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: year unknown (@_ twice, the first one is the anchor)"
+    filename: "FoN1255-001@_N01-GFC2550_InvO1552@_MST-E0_20261105_Stecker.tif"
+
+  - description: "Auxiliary photo record: negative of the Kuklík group (same prefix FoN)"
+    filename: "FoN2104-001@_N01-GFC2590_InvO1552@-y1938_MST-E0_20261105_Stecker.tif"
+
+  - description: "Standard master with CES institutional prefix (NGA)"
+    filename: "NGA~K12345@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+  - description: "InvNo with CES/Museion subnumber -###"
+    filename: "O12345-001@_F01-E4A0001_-_MST-E0_20240115_Smith.tif"
+
+  - description: "Multi-part object with a single InvNo — part 2, frontal"
+    filename: "P4521@_F01-E4A0012_part002_MST-E0_20240115_Smith.tif"
+
+  - description: "Presentational crop of part 1 (non-sculpture object)"
+    filename: "K12345@_F01-E4A0011_part001_FULL-E0W_20240115_Smith.jpg"
+
+  - description: "Sculpture (prefix P): presentational pyramidal derivative directly from MST without FULL-*W"
+    filename: "P4521@_F01-E4A0012_part002_PMD-E0W_20240115_Smith.tif"
+
+  - description: "Subnumbered InvNo whose object itself consists of several parts"
+    filename: "O12345-001@_F01-E4A0020_part001_MST-E0_20240115_Smith.tif"

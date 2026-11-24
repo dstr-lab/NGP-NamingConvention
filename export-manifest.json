@@ -1,0 +1,30 @@
+{
+  "repository": "NGP-NamingConvention",
+  "draft": false,
+  "export_date": "2026-11-24",
+  "source_commit": "5ea3c80",
+  "contracts": {
+    "CONVENTION.yaml": {
+      "version": "2.3.1",
+      "omitted": [
+        "structural_files.input_level",
+        "collections"
+      ]
+    },
+    "POLICY.yaml": {
+      "version": "1.12.0",
+      "omitted": [
+        "pipeline_2_1",
+        "storage",
+        "iiif",
+        "package"
+      ]
+    }
+  },
+  "sha256": {
+    "CONVENTION.yaml": "ee4eb324fbc9abbaaa3c6a53295108fe369394f96e0c6de781a8314b74143930",
+    "LICENSE": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5",
+    "POLICY.yaml": "5755af7bc8dd37eb8113cb14be1783b844378d1f9eef5e4e98928c42ea498b51",
+    "README.md": "b389eaf73175e4e46fe6a962bb5b3c85c71db7dbe132b46f7e2112f5a0ee0ec2"
+  }
+}
